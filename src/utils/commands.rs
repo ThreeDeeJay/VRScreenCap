@@ -1,9 +1,11 @@
 use std::sync::{Arc, Mutex};
 
+#[cfg(not(target_os = "android"))]
 use tray_item::TrayItem;
 
 use crate::loaders::StereoMode;
 
+#[cfg(not(target_os = "android"))]
 use super::tray;
 
 #[derive(Clone)]

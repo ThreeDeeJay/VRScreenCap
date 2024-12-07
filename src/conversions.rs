@@ -1,6 +1,8 @@
 use ash::vk::{self, Format};
 use wgpu::{Device, TextureDescriptor, TextureFormat};
 use wgpu_hal::api::Vulkan;
+
+#[cfg(target_os = "windows")]
 use windows::Win32::Graphics::Dxgi::Common::*;
 
 use crate::{engine::formats::InternalColorFormat, macros::auto_map};

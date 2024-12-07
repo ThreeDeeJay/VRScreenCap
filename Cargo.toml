@@ -8,7 +8,9 @@ description = "A very simple rust program that uses the Vulkan backend of WPGU c
 license = "MIT"
 repository = "https://github.com/artumino/VRScreenCap"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+name = "vr_screen_cap_core"
+crate-type = ["rlib", "cdylib"]
 
 [dependencies]
 wgpu = { version = "0.17.0", git = "https://github.com/artumino/wgpu.git", branch = "fix/multiview_validation" }
