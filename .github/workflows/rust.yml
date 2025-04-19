@@ -16,7 +16,7 @@ jobs:
       - uses: taiki-e/create-gh-release-action@v1
         with:
           # (required) GitHub token for creating GitHub Releases.
-          token: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
+          token: ${{secrets.GITHUB_TOKEN}}
 
   upload-assets:
     strategy:
@@ -46,4 +46,4 @@ jobs:
           # (optional) Comma-separated list of cargo build features to enable
           features: dist
           # (required) GitHub token for uploading assets to GitHub Releases.
-          token: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
+          token: ${{secrets.GITHUB_TOKEN}}
