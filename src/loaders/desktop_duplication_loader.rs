@@ -3,18 +3,15 @@ use windows::Win32::Foundation::HANDLE;
 use anyhow::{anyhow, Context};
 use wgpu::Queue;
 use win_desktop_duplication::{
-    devices::AdapterFactory, outputs::Display, texture::ColorFormat, DesktopDuplicationApi,
+    devices::AdapterFactory,
+    outputs::Display,
+    DesktopDuplicationApi,
 };
 use windows::core::ComInterface;
 use windows::Win32::Graphics::Dxgi::IDXGIResource;
 
 use crate::{
-    engine::{
-        formats::InternalColorFormat,
-        texture::{Bound, Texture2D},
-    },
-    macros::auto_map,
-    utils::external_texture::{ExternalApi, ExternalTextureInfo},
+    engine::texture::{Bound, Texture2D, Unbound},
 };
 
 use super::Loader;
