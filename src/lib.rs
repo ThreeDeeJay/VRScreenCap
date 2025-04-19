@@ -586,7 +586,6 @@ fn run(
     let mut screen_invalidated = false;
     let mut recenter_request = None;
     let mut last_invalidation_check = std::time::Instant::now();
-<<<<<<< HEAD
     let mut last_upgrade_check = std::time::Instant::now();
     let mut input_context = match app_config.no_input {
         false => InputContext::init(&xr_context.instance)
@@ -594,11 +593,6 @@ fn run(
             .unwrap_or(None),
         true => None,
     };
-=======
-    let mut input_context = InputContext::init(&xr_context.instance)
-        .map(Some)
-        .unwrap_or(None);
->>>>>>> parent of afea657 (Better profiling automatic loader upgrade, properly handle katanga unmapping)
 
     if input_context.is_some() {
         let mut attach_context = input_context
@@ -624,13 +618,14 @@ fn run(
 
         let time = std::time::Instant::now();
 
-        // Try to upgrade the loader to ona that has higher priority
-        if current_loader.is_none() || time.duration_since(last_invalidation_check).as_secs() > 10 {
-            
+        // Try to upgrade the loader to one that has higher priority
+        if current_loader.is_none() || time.duration_since(last_upgrade_check).as_secs() > 10 {
             #[cfg(feature = "profiling")]
             profiling::scope!("Loader Upgrade");
 
-            if let Some((texture, aspect, mode, loader)) = try_to_load_texture(&mut loaders, wgpu_context, current_loader) {
+            if let Some((texture, aspect, mode, loader)) =
+                try_to_load_texture(&mut loaders, wgpu_context, current_loader)
+            {
                 let mode = mode.unwrap_or(default_stereo_mode.clone());
                 screen_texture = texture.bind_to_context(wgpu_context, &texture_bind_group_layout);
                 ambient_texture = get_ambient_texture(
@@ -645,11 +640,12 @@ fn run(
                 screen_invalidated = current_loader != Some(loader);
                 current_loader = Some(loader);
             }
+
+            last_upgrade_check = time;
         }
 
         // Check if the loader needs to be invalidated
         if current_loader.is_some() || time.duration_since(last_invalidation_check).as_secs() > 10 {
-            
             #[cfg(feature = "profiling")]
             profiling::scope!("Loader Invalidation Check");
 
@@ -659,17 +655,14 @@ fn run(
 
         // Check if the loader has been invalidated
         if screen_invalidated {
-            
             #[cfg(feature = "profiling")]
             profiling::scope!("Loader Invalidation");
 
             // Try to load a new texture from the same loader, or from any loader if the current one fails
-            let new_loader = 
-                current_loader
+            let new_loader = current_loader
                 .map(|loader_idx| (loaders.get_mut(loader_idx), loader_idx))
                 .filter(|(loader, _)| loader.is_some())
                 .map(|(loader, loader_idx)| try_loader(loader.unwrap(), wgpu_context, loader_idx))
-<<<<<<< HEAD
                 .map(|loader| {
                     if loader.is_some() {
                         loader
@@ -678,13 +671,8 @@ fn run(
                     }
                 })
                 .unwrap_or_default();
-=======
-                .flatten()
-                .unwrap_or(try_to_load_texture(&mut loaders, wgpu_context, None));
->>>>>>> parent of afea657 (Better profiling automatic loader upgrade, properly handle katanga unmapping)
 
-            if let Some((texture, aspect, mode, loader)) = new_loader
-            {
+            if let Some((texture, aspect, mode, loader)) = new_loader {
                 let mode = mode.unwrap_or(default_stereo_mode.clone());
                 screen_texture = texture.bind_to_context(wgpu_context, &texture_bind_group_layout);
                 ambient_texture = get_ambient_texture(
@@ -822,7 +810,6 @@ fn run(
                 profiling::scope!("Begin FrameStream");
                 frame_stream.begin()?;
             }
-<<<<<<< HEAD
 
             #[cfg(feature = "profiling")]
             profiling::scope!("FrameStream Recording");
@@ -854,134 +841,6 @@ fn run(
                 };
                 continue;
             }
-=======
-            Some(openxr::Event::ReferenceSpaceChangePending(_)) => {
-                //Reset XR space to follow runtime
-                xr_space = xr_session.create_reference_space(
-                    openxr::ReferenceSpaceType::LOCAL,
-                    openxr::Posef::IDENTITY,
-                )?;
-            }
-            _ => {
-                // Render to HMD only if we have an active session
-                if session_running {
-                    // Block until the previous frame is finished displaying, and is ready for
-                    // another one. Also returns a prediction of when the next frame will be
-                    // displayed, for use with predicting locations of controllers, viewpoints, etc.
-                    #[cfg(feature = "profiling")]
-                    profiling::scope!("Wait for frame");
-                    let xr_frame_state = frame_wait.wait()?;
-
-                    // Must be called before any rendering is done!
-                    frame_stream.begin()?;
-
-                    #[cfg(feature = "profiling")]
-                    profiling::scope!("FrameStream Recording");
-
-                    // Only render if we should
-                    if !xr_frame_state.should_render {
-                        #[cfg(feature = "profiling")]
-                        {
-                            let predicted_display_time_nanos =
-                                xr_frame_state.predicted_display_time.as_nanos();
-                            profiling::scope!(
-                                "Show Time Calculation",
-                                format!("{predicted_display_time_nanos}").as_str()
-                            );
-                        }
-
-                        // Early bail
-                        if let Err(err) = frame_stream.end(
-                            xr_frame_state.predicted_display_time,
-                            xr_context.blend_mode,
-                            &[],
-                        ) {
-                            log::error!(
-                                "Failed to end frame stream when should_render is FALSE : {:?}",
-                                err
-                            );
-                        };
-                        continue;
-                    }
-
-                    #[cfg(feature = "profiling")]
-                    profiling::scope!("Swapchain Setup");
-
-                    // If we do not have a swapchain yet, create it
-                    let (xr_swapchain, resolution, swapchain_textures) = match swapchain {
-                        Some(ref mut swapchain) => swapchain,
-                        None => {
-                            let new_swapchain =
-                                xr_context.create_swapchain(&xr_session, &wgpu_context.device)?;
-                            swapchain.get_or_insert(new_swapchain)
-                        }
-                    };
-                    // Check which image we need to render to and wait until the compositor is
-                    // done with this image
-                    let image_index = xr_swapchain.acquire_image()?;
-                    xr_swapchain.wait_image(openxr::Duration::INFINITE)?;
-
-                    let swapchain_view = &swapchain_textures[image_index as usize].view;
-
-                    log::trace!("Encode render pass");
-                    #[cfg(feature = "profiling")]
-                    profiling::scope!("Encode Render Pass");
-                    // Render!
-                    let mut encoder = wgpu_context.device.create_command_encoder(
-                        &wgpu::CommandEncoderDescriptor {
-                            label: Some("Render Encorder"),
-                        },
-                    );
-                    if screen.ambient_enabled {
-                        ambient_texture.next();
-                        let mut blit_pass =
-                            encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                                label: Some("Blit Pass"),
-                                color_attachments: &[
-                                    Some(wgpu::RenderPassColorAttachment {
-                                        view: &ambient_texture.current().view,
-                                        resolve_target: None,
-                                        ops: wgpu::Operations {
-                                            load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                                            store: true,
-                                        },
-                                    }),
-                                    Some(wgpu::RenderPassColorAttachment {
-                                        view: &ambient_texture.previous(1).view,
-                                        resolve_target: None,
-                                        ops: wgpu::Operations {
-                                            load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                                            store: true,
-                                        },
-                                    }),
-                                ],
-                                depth_stencil_attachment: None,
-                            });
-
-                        blit_pass.set_pipeline(&temporal_blur_pipeline);
-                        blit_pass.set_bind_group(0, screen_texture.bind_group(), &[]);
-                        blit_pass.set_bind_group(1, ambient_texture.previous(2).bind_group(), &[]);
-                        blit_pass.set_bind_group(2, &global_temporal_blur_uniform_bind_group, &[]);
-                        blit_pass.set_index_buffer(
-                            fullscreen_triangle_index_buffer.slice(..),
-                            wgpu::IndexFormat::Uint32,
-                        );
-                        blit_pass.draw_indexed(0..3, 0, 0..1);
-                    }
-                    {
-                        let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                            label: Some("Render Pass"),
-                            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                                view: swapchain_view,
-                                resolve_target: None,
-                                ops: wgpu::Operations {
-                                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                                    store: true,
-                                },
-                            })],
-                            depth_stencil_attachment: None,
-                        });
->>>>>>> parent of afea657 (Better profiling automatic loader upgrade, properly handle katanga unmapping)
 
             #[cfg(feature = "profiling")]
             profiling::scope!("Encode Render Passes");
@@ -994,7 +853,6 @@ fn run(
                         label: Some("Render Encorder"),
                     });
 
-<<<<<<< HEAD
             if let Some(loader) = current_loader.and_then(|index| loaders.get(index)) {
                 loader.encode_pre_pass(&mut encoder, &screen_texture)?;
             }
@@ -1049,91 +907,12 @@ fn run(
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
                             store: wgpu::StoreOp::Store,
-=======
-                    #[cfg(feature = "profiling")]
-                    profiling::scope!("Locate Views");
-                    log::trace!("Locate views");
-                    // Fetch the view transforms. To minimize latency, we intentionally do this
-                    // *after* recording commands to render the scene, i.e. at the last possible
-                    // moment before rendering begins in earnest on the GPU. Uniforms dependent on
-                    // this data can be sent to the GPU just-in-time by writing them to per-frame
-                    // host-visible memory which the GPU will only read once the command buffer is
-                    // submitted.
-                    let (_, views) = xr_session.locate_views(
-                        VIEW_TYPE,
-                        xr_frame_state.predicted_display_time,
-                        &xr_space,
-                    )?;
-
-                    for (view_idx, view) in views.iter().enumerate() {
-                        let mut eye = cameras
-                            .get_mut(view_idx)
-                            .context("Cannot borrow camera as mutable")?;
-                        eye.entity.position.x = view.pose.position.x;
-                        eye.entity.position.y = view.pose.position.y;
-                        eye.entity.position.z = view.pose.position.z;
-                        eye.entity.rotation.v.x = view.pose.orientation.x;
-                        eye.entity.rotation.v.y = view.pose.orientation.y;
-                        eye.entity.rotation.v.z = view.pose.orientation.z;
-                        eye.entity.rotation.s = view.pose.orientation.w;
-                        eye.entity.update_matrices(&[]);
-                        eye.update_projection_from_tangents(view.fov);
-                        let camera_uniform = camera_uniform
-                            .get_mut(view_idx)
-                            .context("Cannot borrow camera uniform buffer as mutable")?;
-                        camera_uniform.update_view_proj(eye)?;
-                    }
-
-                    log::trace!("Write views");
-                    wgpu_context.queue.write_buffer(
-                        &camera_buffer,
-                        0,
-                        bytemuck::cast_slice(camera_uniform.as_slice()),
-                    );
-
-                    if screen.ambient_enabled {
-                        log::trace!("Writing temporal blur uniforms");
-                        let ambient_texture = &ambient_texture.current().texture;
-                        let resolution = [
-                            ambient_texture.width() as f32,
-                            ambient_texture.height() as f32,
-                        ];
-                        jitter_frame = (jitter_frame + 1) % AMBIENT_BLUR_TEMPORAL_SAMPLES;
-                        temporal_blur_params.jitter =
-                            engine::jitter::get_jitter(jitter_frame, &resolution);
-                        temporal_blur_params.resolution = resolution;
-                        wgpu_context.queue.write_buffer(
-                            &temporal_blur_params_buffer,
-                            0,
-                            bytemuck::cast_slice(&[temporal_blur_params.uniform()]),
-                        );
-                    }
-
-                    #[cfg(feature = "profiling")]
-                    profiling::scope!("Encode Submit");
-
-                    log::trace!("Submit command buffer");
-                    wgpu_context.queue.submit(iter::once(encoder.finish()));
-
-                    #[cfg(feature = "profiling")]
-                    profiling::scope!("Release Swapchain");
-                    log::trace!("Release swapchain image");
-                    xr_swapchain.release_image()?;
-
-                    // End rendering and submit the images
-                    let rect = openxr::Rect2Di {
-                        offset: openxr::Offset2Di { x: 0, y: 0 },
-                        extent: openxr::Extent2Di {
-                            width: resolution.width as _,
-                            height: resolution.height as _,
->>>>>>> parent of afea657 (Better profiling automatic loader upgrade, properly handle katanga unmapping)
                         },
                     })],
                     depth_stencil_attachment: None,
                     ..Default::default()
                 });
 
-<<<<<<< HEAD
                 // Render the ambient dome
                 if screen.ambient_enabled {
                     let ambient_mesh = &screen.ambient_mesh;
@@ -1159,47 +938,6 @@ fn run(
                 );
                 rpass.draw_indexed(0..screen.mesh.indices(), 0, 0..1);
             }
-=======
-                    log::trace!("End frame stream");
-
-                    #[cfg(feature = "profiling")]
-                    {
-                        let predicted_display_time_nanos =
-                            xr_frame_state.predicted_display_time.as_nanos();
-                        profiling::scope!(
-                            "Show Time Calculation",
-                            format!("{predicted_display_time_nanos}").as_str()
-                        );
-                    }
-                    if let Err(err) = frame_stream.end(
-                        xr_frame_state.predicted_display_time,
-                        xr_context.blend_mode,
-                        &[&openxr::CompositionLayerProjection::new()
-                            .space(&xr_space)
-                            .views(&[
-                                openxr::CompositionLayerProjectionView::new()
-                                    .pose(views[0].pose)
-                                    .fov(views[0].fov)
-                                    .sub_image(
-                                        openxr::SwapchainSubImage::new()
-                                            .swapchain(xr_swapchain)
-                                            .image_array_index(0)
-                                            .image_rect(rect),
-                                    ),
-                                openxr::CompositionLayerProjectionView::new()
-                                    .pose(views[1].pose)
-                                    .fov(views[1].fov)
-                                    .sub_image(
-                                        openxr::SwapchainSubImage::new()
-                                            .swapchain(xr_swapchain)
-                                            .image_array_index(1)
-                                            .image_rect(rect),
-                                    ),
-                            ])],
-                    ) {
-                        log::error!("Failed to end frame stream: {}", err);
-                    };
->>>>>>> parent of afea657 (Better profiling automatic loader upgrade, properly handle katanga unmapping)
 
             if screen.ambient_enabled {
                 upload_blur_uniforms(
@@ -1298,28 +1036,11 @@ fn run(
                             }
                         }
                     }
-<<<<<<< HEAD
                     Err(err) => {
                         log::error!("Failed to process inputs: {}", err);
                         reset_app_space(&mut app_space, &xr_session, Some(input_context))?;
-=======
-
-                    if let Some(recenter_request) = recenter_request.take() {
-                        if let Err(err) = recenter_scene(
-                            &xr_session,
-                            &xr_reference_space,
-                            &xr_view_space,
-                            xr_frame_state.predicted_display_time,
-                            recenter_request.horizon_locked,
-                            recenter_request.delay,
-                            &mut xr_space,
-                        ) {
-                            log::error!("Failed to recenter scene: {}", err);
-                        }
->>>>>>> parent of afea657 (Better profiling automatic loader upgrade, properly handle katanga unmapping)
                     }
                 }
-
             }
 
             if let Some(recenter_request) = recenter_request.take() {
@@ -1531,7 +1252,6 @@ fn get_projection_view<'a>(
 }
 
 #[cfg_attr(feature = "profiling", profiling::function)]
-<<<<<<< HEAD
 fn upload_blur_uniforms(
     ambient_texture: &RoundRobinTextureBuffer<Texture2D<Bound>, 3>,
     jitter_frame: &mut u32,
@@ -1591,8 +1311,6 @@ fn upload_camera_uniforms(
 }
 
 #[cfg_attr(feature = "profiling", profiling::function)]
-=======
->>>>>>> parent of afea657 (Better profiling automatic loader upgrade, properly handle katanga unmapping)
 fn get_ambient_texture(
     screen_texture: &Texture2D<Bound>,
     aspect: f32,
@@ -1668,15 +1386,16 @@ fn try_to_load_texture(
         if current_loader == Some(loader_idx) {
             break;
         }
-        if let Some(value) = try_loader(loader, wgpu_context, loader_idx) {
-            return value;
+
+        let loaded_texture = try_loader(loader, wgpu_context, loader_idx);
+        if loaded_texture.is_some() {
+            return loaded_texture;
         }
     }
     None
 }
 
 #[cfg_attr(feature = "profiling", profiling::function)]
-<<<<<<< HEAD
 fn try_loader(
     loader: &mut Box<dyn Loader>,
     wgpu_context: &WgpuContext,
@@ -1687,21 +1406,17 @@ fn try_loader(
         &wgpu_context.device,
         &wgpu_context.queue,
     ) {
-=======
-fn try_loader(loader: &mut Box<dyn Loader>, wgpu_context: &WgpuContext, loader_idx: usize) -> Option<Option<(Texture2D<Unbound>, f32, Option<StereoMode>, usize)>> {
-    if let Ok(tex_source) = loader.load(&wgpu_context.instance, &wgpu_context.device) {
->>>>>>> parent of afea657 (Better profiling automatic loader upgrade, properly handle katanga unmapping)
         let aspect_ratio_multiplier = tex_source
             .stereo_mode
             .as_ref()
             .map(|stereo_mode| stereo_mode.aspect_ratio_multiplier())
             .unwrap_or(1.0);
-        return Some(Some((
+        return Some((
             tex_source.texture,
             (tex_source.width as f32 * aspect_ratio_multiplier) / tex_source.height as f32,
             tex_source.stereo_mode,
             loader_idx,
-        )));
+        ));
     }
     None
 }
