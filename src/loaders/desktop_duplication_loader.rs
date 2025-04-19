@@ -3,6 +3,7 @@ use windows::Win32::Foundation::HANDLE;
 use anyhow::{anyhow, Context};
 use wgpu::Queue;
 use win_desktop_duplication::{
+<<<<<<< HEAD
     devices::AdapterFactory, outputs::Display, texture::ColorFormat, DesktopDuplicationApi,
 };
 use windows::core::ComInterface;
@@ -15,6 +16,15 @@ use crate::{
     },
     macros::auto_map,
     utils::external_texture::{ExternalApi, ExternalTextureInfo},
+=======
+    devices::AdapterFactory,
+    outputs::Display,
+    DesktopDuplicationApi,
+};
+
+use crate::{
+    engine::texture::{Bound, Texture2D, Unbound},
+>>>>>>> parent of afea657 (Better profiling automatic loader upgrade, properly handle katanga unmapping)
 };
 
 use super::Loader;
